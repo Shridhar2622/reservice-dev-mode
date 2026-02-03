@@ -1,0 +1,246 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Mic, ArrowLeft, Star, Clock, Filter, X } from 'lucide-react';
+import { services as staticServices } from '../../data/mockData';
+import { useAdmin } from '../../context/AdminContext';
+import { Link, useNavigate } from 'react-router-dom';
+import MobileBottomNav from '../../components/mobile/MobileBottomNav';
+import MobileServiceDetail from '../Services/MobileServiceDetail';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const MobileSearchPage = () => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeCardId, setActiveCardId] = useState(null);
+    const [selectedServiceId, setSelectedServiceId] = useState(null);
+    const [isListening, setIsListening] = useState(false);
+    const scrollContainerRef = useRef(null);
+    const navigate = useNavigate();
+    const { services, categories } = useAdmin();
+
+    // Rotating Border CSS handled globally in index.css
+
+    // Voice Search Logic
+    // Voice Search Logic
+    const startListening = () => {
+        // Use webkitSpeechRecognition for iOS/Safari compatibility
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            alert("Voice search is not supported in this browser. Please use Chrome or Safari.");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+
+        // Mobile-specific optimizations
+        recognition.lang = 'en-IN';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+            console.log("Recognition session started.");
+            setIsListening(true);
+        };
+
+        recognition.onend = () => {
+            console.log("Recognition session ended.");
+            setIsListening(false);
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Speech recognition error:", event.error);
+            if (event.error === 'not-allowed') {
+                alert("Microphone access denied. Please allow it in browser settings.");
+            } else if (event.error === 'no-speech') {
+                // Silently end if no speech
+            } else if (event.error === 'audio-capture') {
+                alert("No microphone was found or it is in use by another app.");
+            } else {
+                alert("Voice Error: " + event.error);
+            }
+            setIsListening(false);
+        };
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            console.log("Transcript received:", transcript);
+            setSearchQuery(transcript);
+        };
+
+        // CRITICAL: Call start() synchronously in the click handler for mobile compatibility
+        try {
+            recognition.start();
+        } catch (err) {
+            console.error("Start recognition failed:", err);
+            if (err.name === 'InvalidStateError') {
+                // Already running
+            } else {
+                alert("Could not start voice search: " + err.message);
+            }
+            setIsListening(false);
+        }
+    };
+
+
+    // Intersection Observer for Zoom & Rotating Effect
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                // Only apply scroll-driven active class on mobile
+                if (window.innerWidth >= 768) return;
+
+                // Search-Specific: Centered list capture for horizontal results
+                const bestEntry = entries
+                    .filter(e => e.isIntersecting)
+                    .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+                if (bestEntry && bestEntry.intersectionRatio > 0.55) {
+                    const newId = Number(bestEntry.target.dataset.id);
+                    setActiveCardId(prev => (prev === newId ? prev : newId));
+                }
+            },
+            {
+                threshold: [0, 0.5, 1], // Reduced threshold density for performance
+                rootMargin: "-25% 0px -25% 0px" // Tighter window for stability
+            }
+        );
+
+        const cards = document.querySelectorAll('.search-card');
+        cards.forEach((card) => observer.observe(card));
+
+        return () => observer.disconnect();
+    }, [searchQuery]);
+
+    // Filter services based on search query
+    // If query is empty, show only 5 initial results. If query is present, search all active services.
+    const activeServices = React.useMemo(() => services.filter(s => s.isActive !== false), [services]);
+    const filteredServices = searchQuery.trim() === ''
+        ? activeServices.slice(0, 5)
+        : activeServices.filter((service) =>
+            service.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            service.category?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+
+    return (
+        <div className="min-h-screen bg-[#FFFBF2] dark:bg-slate-950 pb-24 font-sans transition-colors duration-300">
+            <AnimatePresence>
+                {selectedServiceId && (
+                    <MobileServiceDetail
+                        serviceId={selectedServiceId}
+                        onClose={() => setSelectedServiceId(null)}
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* Search Header - Removed title for cleaner browse experience */}
+            <div className="sticky top-0 z-30 bg-[#FFFBF2] dark:bg-slate-950 p-4 pb-2 transition-shadow md:hidden">
+                {/* <div className="flex items-center gap-3 mb-4">
+                    <button onClick={() => navigate(-1)} className="p-2 rounded-full bg-white dark:bg-slate-900 shadow-sm border border-gray-100 dark:border-slate-800 active:scale-95 text-gray-700 dark:text-slate-200">
+                        <ArrowLeft className="w-5 h-5" />
+                    </button>
+                    <h1 className="text-xl font-black text-gray-900 dark:text-white">Search</h1>
+                </div> */}
+
+                <div className="flex gap-2 items-center">
+                    <div className="flex-1 relative shadow-[0_4px_15px_rgba(0,0,0,0.05)] dark:shadow-none rounded-2xl bg-white dark:bg-slate-900 border border-rose-50/50 dark:border-slate-800">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="h-4 w-4 text-rose-500" />
+                        </div>
+                        <input
+                            type="text"
+                            autoFocus
+                            className="block w-full pl-10 pr-10 py-3.5 border-none rounded-2xl bg-white dark:bg-slate-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-rose-200 dark:focus:ring-rose-900 transition-all text-sm font-medium"
+                            placeholder="Try 'Sofa Cleaning'..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-3 flex items-center px-2">
+                                <X className="w-4 h-4 text-gray-400" />
+                            </button>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={startListening}
+                        className={`p-3.5 rounded-2xl bg-white dark:bg-slate-900 border shadow-[0_4px_15px_rgba(0,0,0,0.05)] dark:shadow-none flex items-center justify-center active:scale-95 transition-all duration-300
+                        ${isListening
+                                ? 'border-rose-500 ring-4 ring-rose-500/20 animate-pulse'
+                                : 'border-rose-50/50 dark:border-slate-800'}`}
+                    >
+                        <Mic className={`h-5 w-5 transition-colors duration-300 ${isListening ? 'text-rose-600 fill-rose-100' : 'text-rose-500'}`} />
+                    </button>
+                </div>
+
+                {/* Filters */}
+                <div className="flex gap-2 mt-4 overflow-x-auto hide-scrollbar pb-2">
+                    {[{ label: 'All', id: 'All' }, ...categories].map((filter, i) => (
+                        <button
+                            key={i}
+                            onClick={() => navigate('/services', { state: { category: filter.id } })}
+                            className="px-4 py-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-full text-xs font-bold text-gray-600 dark:text-slate-300 whitespace-nowrap shadow-sm hover:border-rose-200 dark:hover:border-rose-800 hover:text-rose-600 dark:hover:text-rose-400 active:scale-95 transition-all"
+                        >
+                            {filter.label || filter.name}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Results */}
+            <div className="px-5 pt-2 flex flex-col gap-12" ref={scrollContainerRef}>
+                <div className="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1 pl-1">
+                    {filteredServices.length} Results Found
+                </div>
+
+                {filteredServices.map(service => (
+                    <div
+                        key={service.id}
+                        data-id={service.id}
+                        onClick={() => setSelectedServiceId(service.id)}
+                        className={`search-card search-card-isolated relative rounded-[2rem] ring-1 ring-transparent dark:ring-white/5 cursor-pointer active:scale-[0.98] ${activeCardId === service.id ? 'scale-[1.02] shadow-2xl' : 'scale-100 shadow-md'}`}
+                    >
+                        <div className="rounded-[2rem] overflow-hidden w-full h-full relative z-10 bg-white dark:bg-slate-900 flex p-4 gap-4 isolation-isolate">
+                            {/* Image Saved */}
+                            <div className="w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-gray-100 dark:bg-slate-800">
+                                <img src={service.image} alt={service.title} className="w-full h-full object-cover" />
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 flex flex-col justify-between">
+                                <div>
+                                    <div className="flex justify-between items-start">
+                                        <h3 className="font-extrabold text-gray-900 dark:text-white text-base leading-tight mb-1">{service.title}</h3>
+                                        <div className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                            {service.rating} <Star className="w-2 h-2 fill-current" />
+                                        </div>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 dark:text-slate-400 font-medium">Home Services • 45 mins</div>
+                                </div>
+
+                                <div className="flex justify-between items-end mt-2">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-gray-400 dark:text-slate-500 line-through">₹{service.price + 200}</span>
+                                        <span className="text-base font-black text-gray-900 dark:text-white">₹{service.price}</span>
+                                    </div>
+                                    <button
+                                        className="bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide hover:bg-rose-600 hover:text-white transition-colors"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedServiceId(service.id);
+                                        }}
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <MobileBottomNav />
+        </div>
+    );
+};
+
+export default MobileSearchPage;

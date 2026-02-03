@@ -1,0 +1,40 @@
+import React, { forwardRef } from 'react';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+const Input = forwardRef(({
+    label,
+    error,
+    className,
+    id,
+    type = 'text',
+    ...props
+}, ref) => {
+    return (
+        <div className="flex flex-col gap-1.5">
+            {label && (
+                <label htmlFor={id} className="text-sm font-medium text-slate-700">
+                    {label}
+                </label>
+            )}
+            <input
+                ref={ref}
+                id={id}
+                type={type}
+                className={twMerge(
+                    'px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all',
+                    error && 'border-red-500 focus:border-red-500 focus:ring-red-500/20',
+                    className
+                )}
+                {...props}
+            />
+            {error && (
+                <span className="text-sm text-red-500">{error}</span>
+            )}
+        </div>
+    );
+});
+
+Input.displayName = "Input";
+
+export default Input;
