@@ -19,8 +19,8 @@ const createSendToken = (user, statusCode, res) => {
     };
 
     if (process.env.NODE_ENV === 'production') {
-        cookieOptions.sameSite = 'lax';
-        cookieOptions.secure = true;
+        cookieOptions.sameSite = 'none'; // Essential for Cross-Site (Vercel -> Render)
+        cookieOptions.secure = true;     // Essential for SameSite=None
     }
 
     res.cookie('jwt', token, cookieOptions);
