@@ -51,36 +51,16 @@ exports.updateMe = async (req, res, next) => {
         const filteredBody = filterObj(req.body, 'name', 'email', 'phone', 'address', 'location', 'profilePhoto');
 
         if (req.file) {
-            const cloudinary = require('cloudinary').v2;
-            cloudinary.config({
-                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-                api_key: process.env.CLOUDINARY_API_KEY,
-                api_secret: process.env.CLOUDINARY_API_SECRET
-            });
-
-            const result = await cloudinary.uploader.upload(req.file.path, {
-                folder: 'users',
-                use_filename: true
-            });
-
-            filteredBody.profilePhoto = result.secure_url;
-
-            // Cleanup local file
-            const fs = require('fs');
-            fs.unlinkSync(req.file.path);
+            // Multer Cloudinary storage already uploads the file
+            filteredBody.profilePhoto = req.file.path;
 
             // Delete old image
             const currentUser = await User.findById(req.user.id);
             if (currentUser.profilePhoto) {
                 const deleteFromCloudinary = require('../utils/cloudinaryDelete');
+                // Check if old photo is different (it should be)
                 await deleteFromCloudinary(currentUser.profilePhoto);
             }
-
-            // Note: Users didn't have local uploads explicitly in the previous code snippet for updateMe
-            // It just said: if (req.file) filteredBody.profilePhoto = req.file.filename;
-            // which implies it was saving the filename but where? 
-            // Ah, User model usually has a default, or it was being served via static path middleware I didn't see fully for users.
-            // Assuming it's similar cleanup if needed or just moving forward with Cloudinary.
         }
 
         // 3) Update user document

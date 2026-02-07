@@ -2,9 +2,9 @@ const Joi = require('joi');
 
 const createBooking = {
     body: Joi.object().keys({
-        serviceId: Joi.string().required().messages({
-            'string.empty': 'Service ID is required',
-            'any.required': 'Service ID is required'
+        categoryId: Joi.string().required().messages({
+            'string.empty': 'Category ID is required',
+            'any.required': 'Category ID is required'
         }),
         scheduledAt: Joi.date().greater('now').required().messages({
             'date.base': 'Scheduled date must be a valid date',
@@ -28,8 +28,10 @@ const updateBookingStatus = {
         finalAmount: Joi.number().optional(),
         extraReason: Joi.string().optional(),
         technicianNote: Joi.string().max(1000).allow('').optional(),
-        securityPin: Joi.string().optional()
-    })
+        securityPin: Joi.string().optional(),
+        partImages: Joi.any().optional(), // Allow file fields if they leak into body
+        billImage: Joi.any().optional()
+    }).unknown(true) // Allow unknown fields (like potential multer artifacts)
 };
 
 const getBooking = {

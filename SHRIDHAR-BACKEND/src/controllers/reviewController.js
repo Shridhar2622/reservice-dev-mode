@@ -32,7 +32,7 @@ exports.createReview = async (req, res, next) => {
             booking: bookingId,
             customer: req.user.id,
             technician: booking.technician,
-            category: booking.service.category // Save category for aggregation
+            category: booking.category?._id || booking.category // Save category for aggregation
         });
 
         // 5. Notify Technician

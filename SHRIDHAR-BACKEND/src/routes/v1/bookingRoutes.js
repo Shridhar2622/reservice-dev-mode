@@ -20,7 +20,7 @@ router.get('/stats', restrictTo('TECHNICIAN'), bookingController.getTechnicianSt
 
 router
     .route('/')
-    .post(validate(createBooking), bookingController.createBooking)
+    .post(upload.single('referenceImage'), validate(createBooking), bookingController.createBooking)
     .get(bookingController.getAllBookings);
 
 router

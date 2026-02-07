@@ -19,9 +19,9 @@ const technicianProfileSchema = new mongoose.Schema({
         type: String,
         trim: true
     }],
-    services: [{
+    categories: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Service'
+        ref: 'Category'
     }],
     status: {
         type: String,

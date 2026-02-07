@@ -10,5 +10,6 @@ router.get('/', reasonController.getAllReasons);
 
 // Admin only routes
 router.post('/', restrictTo('ADMIN'), reasonController.createReason);
+router.delete('/:id', restrictTo('ADMIN'), reasonController.deleteReason);
 
 module.exports = router;

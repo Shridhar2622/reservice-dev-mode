@@ -13,27 +13,12 @@ exports.createProfile = async (req, res, next) => {
         let profileData = {
             bio: req.body.bio,
             skills: req.body.skills,
-            location: req.body.location
+            // location: req.body.location // Removed globally per request
         };
 
         if (req.file) {
-            const cloudinary = require('cloudinary').v2;
-            cloudinary.config({
-                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-                api_key: process.env.CLOUDINARY_API_KEY,
-                api_secret: process.env.CLOUDINARY_API_SECRET
-            });
-
-            const result = await cloudinary.uploader.upload(req.file.path, {
-                folder: 'technicians',
-                use_filename: true
-            });
-
-            profileData.profilePhoto = result.secure_url;
-
-            // Cleanup local file
-            const fs = require('fs');
-            fs.unlinkSync(req.file.path);
+            // Multer Cloudinary storage already uploads the file
+            profileData.profilePhoto = req.file.path;
         } else if (req.body.profilePhoto) {
             profileData.profilePhoto = req.body.profilePhoto;
         }
@@ -67,27 +52,13 @@ exports.updateProfile = async (req, res, next) => {
         const currentProfile = await TechnicianProfile.findOne({ user: req.user.id });
 
         if (req.file) {
-            const cloudinary = require('cloudinary').v2;
-            cloudinary.config({
-                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-                api_key: process.env.CLOUDINARY_API_KEY,
-                api_secret: process.env.CLOUDINARY_API_SECRET
-            });
-
-            const result = await cloudinary.uploader.upload(req.file.path, {
-                folder: 'technicians',
-                use_filename: true
-            });
-
-            req.body.profilePhoto = result.secure_url;
-
-            // Cleanup local file
-            const fs = require('fs');
-            fs.unlinkSync(req.file.path);
+            // Multer already uploaded new file
+            req.body.profilePhoto = req.file.path;
 
             // Delete old photo from Cloudinary if applicable
             const deleteFromCloudinary = require('../utils/cloudinaryDelete');
             if (currentProfile && currentProfile.profilePhoto) {
+                // Check if the old photo is different from the new one (it should be)
                 await deleteFromCloudinary(currentProfile.profilePhoto);
             }
         }
@@ -179,29 +150,15 @@ exports.uploadDocuments = async (req, res, next) => {
             'documents.verificationStatus': 'PENDING'
         };
 
-        const cloudinary = require('cloudinary').v2;
-        cloudinary.config({
-            cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-            api_key: process.env.CLOUDINARY_API_KEY,
-            api_secret: process.env.CLOUDINARY_API_SECRET
-        });
-
-        const fs = require('fs');
-
+        // Multer Cloudinary storage already uploaded files
         if (req.files.aadharCard) {
-            const res = await cloudinary.uploader.upload(req.files.aadharCard[0].path, { folder: 'verification' });
-            updateData['documents.aadharCard'] = res.secure_url;
-            fs.unlinkSync(req.files.aadharCard[0].path);
+            updateData['documents.aadharCard'] = req.files.aadharCard[0].path;
         }
         if (req.files.panCard) {
-            const res = await cloudinary.uploader.upload(req.files.panCard[0].path, { folder: 'verification' });
-            updateData['documents.panCard'] = res.secure_url;
-            fs.unlinkSync(req.files.panCard[0].path);
+            updateData['documents.panCard'] = req.files.panCard[0].path;
         }
         if (req.files.resume) {
-            const res = await cloudinary.uploader.upload(req.files.resume[0].path, { folder: 'verification' });
-            updateData['documents.resume'] = res.secure_url;
-            fs.unlinkSync(req.files.resume[0].path);
+            updateData['documents.resume'] = req.files.resume[0].path;
         }
 
         // 3. Update Profile
@@ -237,20 +194,9 @@ exports.uploadDocuments = async (req, res, next) => {
 
 exports.getMyProfile = async (req, res, next) => {
     try {
-        // 1. AUTO-SYNC: Ensure the services array matches actual Service documents
-        // Use atomic update to avoid race conditions with isOnline status
-        const Service = require('../models/Service');
-        const realServices = await Service.find({ technician: req.user.id }).select('_id');
-        const realServiceIds = realServices.map(s => s._id);
-
-        // 2. Find and Update atomically, then populate
-        const profile = await TechnicianProfile.findOneAndUpdate(
-            { user: req.user.id },
-            { services: realServiceIds },
-            { new: true }
-        )
+        const profile = await TechnicianProfile.findOne({ user: req.user.id })
             .populate('user', 'name email phone profilePhoto')
-            .populate('services');
+            .populate('categories');
 
         if (!profile) {
             return res.status(200).json({

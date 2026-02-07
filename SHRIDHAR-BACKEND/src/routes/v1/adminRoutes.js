@@ -19,13 +19,9 @@ router.get('/technicians', adminController.getAllTechnicians);
 router.post('/technicians', adminController.createTechnician);
 router.patch('/technicians/:id/approve', adminController.approveTechnician);
 router.patch('/technicians/:id/reject', adminController.rejectTechnician);
+router.delete('/technicians/:id', adminController.deleteTechnician);
 
-// --- DEALER MANAGEMENT ---
-router.get('/dealers', adminController.getAllDealers);
-router.post('/dealers', adminController.createDealer);
-router.patch('/dealers/:id', adminController.updateDealer);
-router.delete('/dealers/:id', adminController.deleteDealer);
-router.patch('/dealers/:id/status', adminController.toggleDealerStatus);
+
 
 // --- SERVICE MANAGEMENT ---
 router.get('/services', adminController.getAllServices);

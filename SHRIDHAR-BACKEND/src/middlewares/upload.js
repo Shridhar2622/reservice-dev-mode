@@ -1,23 +1,16 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
 const AppError = require('../utils/AppError');
 
-// Ensure upload directory exists
-const uploadDir = 'public/uploads/technicians';
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Storage Configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        // Naming: technician-{userId}-{timestamp}.ext
-        const ext = file.mimetype.split('/')[1];
-        cb(null, `technician-${req.user.id}-${Date.now()}.${ext}`);
+// Cloudinary Storage Configuration
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'reservice/technicians', // Folder in Cloudinary
+        allowed_formats: ['jpg', 'png', 'jpeg', 'pdf'],
+        resource_type: 'auto', // Auto-detect (image/raw/video)
+        public_id: (req, file) => `technician-${req.user?.id || 'guest'}-${Date.now()}` // Custom public_id
     }
 });
 

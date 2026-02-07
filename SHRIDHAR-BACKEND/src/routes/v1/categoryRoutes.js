@@ -1,6 +1,7 @@
 const express = require('express');
 const categoryController = require('../../controllers/categoryController');
 const authMiddleware = require('../../middlewares/auth');
+const upload = require('../../middlewares/upload');
 
 const router = express.Router();
 
@@ -11,8 +12,8 @@ router.get('/:id', categoryController.getCategory);
 router.use(authMiddleware.protect);
 router.use(authMiddleware.restrictTo('ADMIN'));
 
-router.post('/', categoryController.createCategory);
-router.patch('/:id', categoryController.updateCategory);
+router.post('/', upload.single('image'), categoryController.createCategory);
+router.patch('/:id', upload.single('image'), categoryController.updateCategory);
 router.delete('/:id', categoryController.deleteCategory);
 
 module.exports = router;

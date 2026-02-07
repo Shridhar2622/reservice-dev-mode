@@ -6,23 +6,8 @@ exports.createService = async (req, res, next) => {
         let headerImage = 'default-service.jpg';
 
         if (req.file) {
-            const cloudinary = require('cloudinary').v2;
-            cloudinary.config({
-                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-                api_key: process.env.CLOUDINARY_API_KEY,
-                api_secret: process.env.CLOUDINARY_API_SECRET
-            });
-
-            const result = await cloudinary.uploader.upload(req.file.path, {
-                folder: 'services',
-                use_filename: true
-            });
-
-            headerImage = result.secure_url;
-
-            // Cleanup local file
-            const fs = require('fs');
-            fs.unlinkSync(req.file.path);
+            // Multer Cloudinary storage already uploads the file
+            headerImage = req.file.path;
         } else if (req.body.headerImage) {
             // Fallback if they sent a URL string (though UI shouldn't allow mixed if file input is used)
             headerImage = req.body.headerImage;
@@ -270,23 +255,8 @@ exports.updateService = async (req, res, next) => {
 
         // Check if new image is being uploaded
         if (req.file) {
-            const cloudinary = require('cloudinary').v2;
-            cloudinary.config({
-                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-                api_key: process.env.CLOUDINARY_API_KEY,
-                api_secret: process.env.CLOUDINARY_API_SECRET
-            });
-
-            const result = await cloudinary.uploader.upload(req.file.path, {
-                folder: 'services',
-                use_filename: true
-            });
-
-            req.body.headerImage = result.secure_url;
-
-            // Cleanup local file
-            const fs = require('fs');
-            fs.unlinkSync(req.file.path);
+            // Multer Cloudinary storage already uploads the file
+            req.body.headerImage = req.file.path;
 
             // Delete old image from Cloudinary
             const deleteFromCloudinary = require('../utils/cloudinaryDelete');

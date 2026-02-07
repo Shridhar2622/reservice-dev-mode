@@ -33,6 +33,17 @@ const categorySchema = new mongoose.Schema({
     order: {
         type: Number,
         default: 0
+    },
+    price: {
+        type: Number,
+        default: 0
+    },
+    originalPrice: {
+        type: Number
+    },
+    rating: {
+        type: Number,
+        default: 0
     }
 }, {
     toJSON: { virtuals: true },

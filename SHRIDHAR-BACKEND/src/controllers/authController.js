@@ -45,6 +45,10 @@ exports.login = async (req, res, next) => {
         }
 
         // 3) If everything ok, send token to client
+        if (user.role === 'TECHNICIAN') {
+            await user.populate('technicianProfile');
+        }
+
         createSendToken(user, 200, res);
     } catch (err) {
         next(err);
@@ -106,7 +110,7 @@ exports.googleAuth = async (req, res, next) => {
 };
 
 exports.googleAuthCallback = (req, res, next) => {
-    passport.authenticate('google', { session: false }, (err, user, info) => {
+    passport.authenticate('google', { session: false }, async (err, user, info) => {
         if (err) {
             return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=auth_failed`);
         }
@@ -131,9 +135,13 @@ exports.googleAuthCallback = (req, res, next) => {
         // Redirect to frontend based on ROLE
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         if (user.role === 'TECHNICIAN') {
-            if (user.isTechnicianOnboarded) {
+            // Fetch fresh user with profile to check status
+            const techUser = await User.findById(user._id).populate('technicianProfile');
+
+            if (techUser.isTechnicianOnboarded && techUser.technicianProfile?.documents?.verificationStatus === 'VERIFIED') {
                 res.redirect(`${frontendUrl}/technician/dashboard`);
             } else {
+                // If not onboarded OR pending verification -> Onboarding page
                 res.redirect(`${frontendUrl}/technician/onboarding`);
             }
         } else if (user.role === 'ADMIN') {

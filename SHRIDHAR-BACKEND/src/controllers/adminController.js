@@ -4,7 +4,7 @@ const Service = require('../models/Service');
 const Booking = require('../models/Booking');
 const Review = require('../models/Review');
 const Settings = require('../models/Settings');
-const Dealer = require('../models/Dealer');
+
 const AppError = require('../utils/AppError');
 const adminService = require('../services/adminService');
 
@@ -105,20 +105,38 @@ exports.getDashboardStats = async (req, res, next) => {
 
 exports.getAllTechnicians = async (req, res, next) => {
     try {
-        const { status, limit, page } = req.query;
+        const { status, limit, page, category } = req.query;
         const filter = {};
 
         if (status) {
             filter['documents.verificationStatus'] = status.toUpperCase();
         }
 
+        if (category) {
+            // Find technicians who have this category in their list
+            filter.categories = category;
+        }
+
+        // Pagination
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 10;
+        const skip = (pageNum - 1) * limitNum;
+
         const technicians = await TechnicianProfile.find(filter)
             .populate('user', 'name email phone isActive') // Important: See user details
-            .sort('-createdAt'); // Newest first
+            .populate('categories', 'name') // Populate category names
+            .sort('-createdAt')
+            .skip(skip)
+            .limit(limitNum);
+
+        const total = await TechnicianProfile.countDocuments(filter);
 
         res.status(200).json({
             status: 'success',
             results: technicians.length,
+            total,
+            totalPages: Math.ceil(total / limitNum),
+            currentPage: pageNum,
             data: { technicians }
         });
     } catch (error) {
@@ -128,9 +146,20 @@ exports.getAllTechnicians = async (req, res, next) => {
 
 exports.approveTechnician = async (req, res, next) => {
     try {
+        const { categoryIds } = req.body; // Expecting Array of Strings
         const technician = await TechnicianProfile.findById(req.params.id);
         if (!technician) return next(new AppError('Technician not found', 404));
 
+        if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+            return next(new AppError('At least one category (Skill) must be assigned to approve.', 400));
+        }
+
+        // Validate Categories exist? (Optional but good)
+        // const Category = require('../models/Category');
+        // const count = await Category.countDocuments({ _id: { $in: categoryIds } });
+        // if (count !== categoryIds.length) ...
+
+        technician.categories = categoryIds;
         technician.documents.verificationStatus = 'VERIFIED';
         await technician.save();
 
@@ -140,7 +169,7 @@ exports.approveTechnician = async (req, res, next) => {
             action: 'TECHNICIAN_APPROVE',
             targetType: 'TechnicianProfile',
             targetId: technician._id,
-            details: { previousStatus: 'PENDING' }
+            details: { previousStatus: 'PENDING', assignedCategories: categoryIds }
         });
 
         res.status(200).json({ status: 'success', data: { technician } });
@@ -172,9 +201,47 @@ exports.rejectTechnician = async (req, res, next) => {
     }
 };
 
+exports.deleteTechnician = async (req, res, next) => {
+    try {
+        const technician = await TechnicianProfile.findById(req.params.id);
+        if (!technician) return next(new AppError('Technician not found', 404));
+
+        // Delete associated User?
+        // Usually good practice to keep the User but maybe mark as deleted, 
+        // OR if the user requested "Permanently Delete", we might delete both.
+        // For now, let's delete the Profile and perhaps the User if it's a technician-only account.
+        // Assuming we just want to remove the technician role/profile.
+
+        // Strategy: Delete TechnicianProfile, and potentially delete User if we want full cleanup.
+        // Let's delete both for a "hard delete".
+
+        await TechnicianProfile.findByIdAndDelete(req.params.id);
+
+        if (technician.user) {
+            const user = await User.findById(technician.user);
+            // Verify it is indeed a technician before deleting user to avoid accidents if they have dual roles (though not current arch)
+            if (user && user.role === 'TECHNICIAN') {
+                await User.findByIdAndDelete(technician.user);
+            }
+        }
+
+        // LOG ACTION
+        await adminService.logAction({
+            adminId: req.user.id,
+            action: 'TECHNICIAN_DELETE',
+            targetType: 'TechnicianProfile',
+            targetId: req.params.id
+        });
+
+        res.status(204).json({ status: 'success', data: null });
+    } catch (error) {
+        next(error);
+    }
+};
+
 exports.getAllUsers = async (req, res, next) => {
     try {
-        const { role, isActive, search } = req.query;
+        const { role, isActive, search, limit, page } = req.query;
         const filter = {};
 
         if (role) filter.role = role.toUpperCase();
@@ -187,11 +254,25 @@ exports.getAllUsers = async (req, res, next) => {
             ];
         }
 
-        const users = await User.find(filter).select('-password');
+        // Pagination
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 10;
+        const skip = (pageNum - 1) * limitNum;
+
+        const users = await User.find(filter)
+            .select('-password')
+            .sort('-createdAt')
+            .skip(skip)
+            .limit(limitNum);
+
+        const total = await User.countDocuments(filter);
 
         res.status(200).json({
             status: 'success',
             results: users.length,
+            total,
+            totalPages: Math.ceil(total / limitNum),
+            currentPage: pageNum,
             data: { users }
         });
     } catch (error) {
@@ -287,10 +368,10 @@ exports.getAllBookings = async (req, res, next) => {
         if (status) filter.status = status.toUpperCase();
 
         const bookings = await Booking.find(filter)
-            .populate('customer', 'name email')
+            .populate('customer', 'name email phone')
             .populate('technician', 'name email phone')
-            .populate('service', 'title price')
-            .populate('extraReason', 'reason')
+            .populate('category', 'name price')
+            .populate('review')
             .sort('-createdAt');
 
         res.status(200).json({
@@ -404,79 +485,7 @@ exports.deleteReview = async (req, res, next) => {
         next(error);
     }
 };
-// --- DEALER CONTROLLERS ---
 
-exports.getAllDealers = async (req, res, next) => {
-    try {
-        const dealers = await Dealer.find().sort('-createdAt');
-        res.status(200).json({
-            status: 'success',
-            data: { dealers }
-        });
-    } catch (err) {
-        next(err);
-    }
-};
-
-exports.createDealer = async (req, res, next) => {
-    try {
-        const dealer = await Dealer.create(req.body);
-        res.status(201).json({
-            status: 'success',
-            data: { dealer }
-        });
-    } catch (err) {
-        next(err);
-    }
-};
-
-exports.updateDealer = async (req, res, next) => {
-    try {
-        const dealer = await Dealer.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true
-        });
-        if (!dealer) return next(new AppError('No dealer found with that ID', 404));
-
-        res.status(200).json({
-            status: 'success',
-            data: { dealer }
-        });
-    } catch (err) {
-        next(err);
-    }
-};
-
-exports.deleteDealer = async (req, res, next) => {
-    try {
-        const dealer = await Dealer.findByIdAndDelete(req.params.id);
-        if (!dealer) return next(new AppError('No dealer found with that ID', 404));
-
-        res.status(200).json({
-            status: 'success',
-            message: 'Dealer deleted successfully'
-        });
-    } catch (err) {
-        next(err);
-    }
-};
-
-exports.toggleDealerStatus = async (req, res, next) => {
-    try {
-        const dealer = await Dealer.findById(req.params.id);
-        if (!dealer) return next(new AppError('No dealer found with that ID', 404));
-
-        dealer.isActive = !dealer.isActive;
-        await dealer.save();
-
-        res.status(200).json({
-            status: 'success',
-            data: { dealer }
-        });
-    } catch (err) {
-        next(err);
-    }
-};
 
 // --- WORK ASSIGNMENT ---
 
@@ -495,16 +504,26 @@ exports.assignTechnician = async (req, res, next) => {
             booking.status = 'ASSIGNED';
         }
 
-        // Generate a fresh Happy PIN if not present (or regenerate for security)
-        const securityPin = Math.floor(100000 + Math.random() * 900000).toString();
-        booking.securityPin = securityPin;
+        // Helper to generate Happy Pin (MOVED to Technician Accept logic)
+        // const securityPin = Math.floor(100000 + Math.random() * 900000).toString();
+        // booking.securityPin = securityPin;
 
-        await booking.save();
+        await booking.save({ validateBeforeSave: false });
+
+        // Notify Technician
+        const notificationService = require('../services/notificationService');
+        await notificationService.send({
+            recipient: technicianId,
+            type: 'BOOKING_ASSIGNED',
+            title: 'New Job Assigned',
+            message: `You have been assigned to a booking (ID: ${booking.img || booking._id})`,
+            data: { bookingId: booking._id }
+        });
 
         const updatedBooking = await Booking.findById(booking._id)
             .populate('customer', 'name email phone')
             .populate('technician', 'name email phone')
-            .populate('service', 'title price');
+            .populate('category', 'name price');
 
         res.status(200).json({
             status: 'success',

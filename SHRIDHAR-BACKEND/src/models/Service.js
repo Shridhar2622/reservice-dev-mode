@@ -3,8 +3,8 @@ const mongoose = require('mongoose');
 const serviceSchema = new mongoose.Schema({
     technician: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: [true, 'Service must belong to a technician']
+        ref: 'User'
+        // required: [true, 'Service must belong to a technician'] // Made optional for Admin-managed global services
     },
     title: {
         type: String,

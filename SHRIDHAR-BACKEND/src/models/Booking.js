@@ -8,13 +8,13 @@ const bookingSchema = new mongoose.Schema({
     },
     technician: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: [true, 'Booking must belong to a technician']
+        ref: 'User'
+        // required: [true, 'Booking must belong to a technician'] // Decoupled: Assigned later
     },
-    service: {
+    category: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Service',
-        required: [true, 'Booking must be for a service']
+        ref: 'Category',
+        required: [true, 'Booking must be for a category']
     },
     status: {
         type: String,
@@ -71,8 +71,8 @@ const bookingSchema = new mongoose.Schema({
         type: Number
     },
     extraReason: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Reason'
+        type: String,
+        trim: true
     },
     technicianNote: {
         type: String,
@@ -82,8 +82,11 @@ const bookingSchema = new mongoose.Schema({
         type: String
     }],
     securityPin: {
-        type: String,
-        required: [true, 'Happy Pin is required for completion verification']
+        type: String
+        // required: [true, 'Happy Pin is required for completion verification'] // Generated on assignment
+    },
+    referenceImage: {
+        type: String
     },
     completedAt: {
         type: Date

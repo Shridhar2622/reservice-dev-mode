@@ -13,48 +13,16 @@ const generateHappyPin = () => {
 
 exports.createBooking = async (req, res, next) => {
     try {
-        const { serviceId, scheduledAt, notes } = req.body;
+        const { categoryId, scheduledAt, notes } = req.body;
+        const Category = require('../models/Category');
 
-        // 1. Check if service exists AND is active
-        const service = await Service.findById(serviceId).populate('technician');
-        if (!service || !service.isActive) {
-            return next(new AppError('Service not found or not active', 404));
+        // 1. Check if category exists AND is active
+        const category = await Category.findById(categoryId);
+        if (!category || !category.isActive) {
+            return next(new AppError('Category not found or not active', 404));
         }
 
-        // 2. Prevent technician from booking their own service
-        if (service.technician._id.toString() === req.user.id) {
-            return next(new AppError('You cannot book your own service', 400));
-        }
-
-        // 3. Distance & ETA Logic (Haversine Formula)
-        let distance = 0;
-        let estimatedDuration = 0;
         const coordinates = req.body.coordinates; // Expecting [lng, lat]
-
-        if (coordinates && coordinates.length === 2) {
-            const TechnicianProfile = require('../models/TechnicianProfile');
-            const techProfile = await TechnicianProfile.findOne({ user: service.technician._id });
-
-            if (techProfile && techProfile.location && techProfile.location.coordinates) {
-                const [lon1, lat1] = coordinates;
-                const [lon2, lat2] = techProfile.location.coordinates;
-
-                const toRad = (value) => (value * Math.PI) / 180;
-                const R = 6371; // Earth radius in km
-
-                const dLat = toRad(lat2 - lat1);
-                const dLon = toRad(lon2 - lon1);
-                const a =
-                    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                distance = parseFloat((R * c).toFixed(2)); // Distance in km
-
-                // Estimate: 30km/h average speed in city + 10 mins buffer
-                estimatedDuration = Math.ceil((distance / 30) * 60 + 10);
-            }
-        }
 
         // Helper to format location
         const formatLocation = (loc) => {
@@ -72,13 +40,13 @@ exports.createBooking = async (req, res, next) => {
             return undefined;
         };
 
-        let booking = await Booking.create({
+        const bookingData = {
             customer: req.user.id,
-            technician: service.technician._id,
-            service: serviceId,
-            price: service.price,
+            category: categoryId,
+            price: category.price || 0,
             scheduledAt,
             notes,
+            referenceImage: req.file ? req.file.path : undefined, // Cloudinary URL
             location: {
                 type: 'Point',
                 coordinates: coordinates || [0, 0],
@@ -86,24 +54,28 @@ exports.createBooking = async (req, res, next) => {
             },
             pickupLocation: formatLocation(req.body.pickupLocation),
             dropLocation: formatLocation(req.body.dropLocation),
-            distance,
-            estimatedDuration,
-            securityPin: generateHappyPin()
-        });
+            status: 'PENDING',
+            technician: null // Explicitly no technician at booking time
+        };
+
+        let booking = await Booking.create(bookingData);
 
         // Populate for immediate frontend use
         booking = await Booking.findById(booking._id)
-            .populate('service', 'title price category headerImage')
-            .populate('technician', 'name email phone profilePhoto');
+            .populate('category', 'name price image icon')
+            .populate('customer', 'name email phone profilePhoto');
 
-        // 4. Send Notification to Technician
-        await notificationService.send({
-            recipient: service.technician._id,
-            type: 'BOOKING_REQUEST',
-            title: 'New Booking Request',
-            message: `${req.user.name} has requested a booking for ${service.title}`,
-            data: { bookingId: booking._id, serviceId: service._id }
-        });
+        // 4. Send Notification to Technician (Only if assigned)
+        // This logic is now handled by the assignment process, not initial booking creation.
+        // if (booking.technician) {
+        //     await notificationService.send({
+        //         recipient: booking.technician._id,
+        //         type: 'BOOKING_REQUEST',
+        //         title: 'New Booking Request',
+        //         message: `${req.user.name} has requested a booking for ${service.title}`,
+        //         data: { bookingId: booking._id, serviceId: service._id }
+        //     });
+        // }
 
         res.status(201).json({
             status: 'success',
@@ -139,11 +111,16 @@ exports.getAllBookings = async (req, res, next) => {
         }
 
         const bookings = await Booking.find(filter)
-            .populate('service', 'title price category headerImage')
+            .populate('category', 'name price image icon')
             .populate('customer', 'name email phone location profilePhoto')
             .populate('technician', 'name email phone profilePhoto')
             .populate('review')
             .sort(sortStr);
+
+        // Security: Hide Happy Pin from Technician
+        if (req.user.role === 'TECHNICIAN') {
+            bookings.forEach(b => b.securityPin = undefined);
+        }
 
         res.status(200).json({
             status: 'success',
@@ -160,7 +137,7 @@ exports.getAllBookings = async (req, res, next) => {
 exports.getBooking = async (req, res, next) => {
     try {
         const booking = await Booking.findById(req.params.bookingId)
-            .populate('service', 'title price category headerImage')
+            .populate('category', 'name price image icon')
             .populate('customer', 'name email phone profilePhoto')
             .populate('technician', 'name email phone profilePhoto')
             .populate('review');
@@ -178,6 +155,11 @@ exports.getBooking = async (req, res, next) => {
             return next(new AppError('You do not have permission to view this booking', 403));
         }
 
+        // Security: Hide Happy Pin from Technician
+        if (isTechnician) {
+            booking.securityPin = undefined;
+        }
+
         res.status(200).json({
             status: 'success',
             data: {
@@ -192,43 +174,64 @@ exports.getBooking = async (req, res, next) => {
 exports.updateBookingStatus = async (req, res, next) => {
     try {
         const { status } = req.body;
-        const booking = await Booking.findById(req.params.bookingId).populate('service');
+        const booking = await Booking.findById(req.params.bookingId).populate('category');
 
         if (!booking) {
             return next(new AppError('No booking found with that ID', 404));
         }
 
-        const isTechnician = booking.technician.toString() === req.user.id;
-        const isCustomer = booking.customer.toString() === req.user.id;
+        const isTechnician = booking.technician?.toString() === req.user.id;
+        const isCustomer = booking.customer?.toString() === req.user.id;
 
         // State Machine Logic
         if (status === 'CANCELLED') {
-            // Both can cancel if pending or accepted
-            if (!['PENDING', 'ACCEPTED'].includes(booking.status)) {
+            // Both can cancel if pending, assigned, accepted OR IN_PROGRESS
+            if (!['PENDING', 'ASSIGNED', 'ACCEPTED', 'IN_PROGRESS'].includes(booking.status)) {
                 return next(new AppError('Cannot cancel booking at this stage', 400));
             }
             // Notification target logic
             const recipient = isCustomer ? booking.technician : booking.customer;
-            await notificationService.send({
-                recipient,
-                type: 'BOOKING_CANCELLED',
-                title: 'Booking Cancelled',
-                message: `Booking for ${booking.service?.title || 'Unknown Service'} was cancelled`,
-                data: { bookingId: booking._id }
-            });
+            if (recipient) {
+                await notificationService.send({
+                    recipient,
+                    type: 'BOOKING_CANCELLED',
+                    title: 'Booking Cancelled',
+                    message: `Booking for ${booking.category?.name || 'Unknown Category'} was cancelled`,
+                    data: { bookingId: booking._id }
+                });
+            }
+            booking.securityPin = undefined; // Nullify pin on cancel
+            booking.status = 'CANCELLED'; // EXPLICITLY SET STATUS FOR PERSISTENCE
         }
         else if (['ACCEPTED', 'REJECTED'].includes(status)) {
             // Only Technician can accept/reject
             if (!isTechnician) return next(new AppError('Only technician can accept/reject', 403));
             if (!['PENDING', 'ASSIGNED'].includes(booking.status)) return next(new AppError('Can only update pending or assigned bookings', 400));
 
+            // Notify Customer
             await notificationService.send({
                 recipient: booking.customer,
                 type: `BOOKING_${status}`,
-                title: `Booking ${status}`,
-                message: `Your booking for ${booking.service?.title || 'Unknown Service'} was ${status.toLowerCase()}`,
+                title: `Booking ${status === 'REJECTED' ? 'Assignment Update' : status}`,
+                message: status === 'REJECTED'
+                    ? `The assigned technician was unavailable. We are finding a new expert for you.`
+                    : `Your booking for ${booking.category?.name || 'Unknown Category'} was ${status.toLowerCase()}`,
                 data: { bookingId: booking._id }
             });
+
+            // Notify Admin
+            console.log(`[INFO] Technician ${req.user.name} ${status.toLowerCase()} booking ${booking._id}`);
+
+            // Logic for status transition
+            if (status === 'REJECTED') {
+                booking.status = 'PENDING';
+                booking.technician = null;
+            } else {
+                booking.status = 'ACCEPTED';
+                if (!booking.securityPin) {
+                    booking.securityPin = generateHappyPin();
+                }
+            }
         }
         else if (['IN_PROGRESS', 'COMPLETED'].includes(status)) {
             // Only Technician can progress
@@ -245,51 +248,79 @@ exports.updateBookingStatus = async (req, res, next) => {
             if (status === 'COMPLETED') {
                 const { securityPin, finalAmount, extraReason, technicianNote } = req.body;
 
+                console.log('[DEBUG] Completion Request:', {
+                    body: req.body,
+                    filesCount: req.files?.length || 0
+                });
+
                 // 1. Verify Happy Pin
-                if (!securityPin || securityPin !== booking.securityPin) {
-                    return next(new AppError('Invalid Happy Pin provided', 400));
+                const inputPin = securityPin ? String(securityPin).trim() : '';
+                const storedPin = booking.securityPin ? String(booking.securityPin).trim() : '';
+
+                if (!inputPin || inputPin !== storedPin) {
+                    return next(new AppError(`Invalid Happy Pin provided.`, 400));
                 }
 
-                // 2. Set Completion Fields
+                // 2. Enforce Work Photos (Compulsory)
+                if ((!req.files || req.files.length === 0) && (!booking.partImages || booking.partImages.length === 0)) {
+                    return next(new AppError('At least one photo of the completed work is required', 400));
+                }
+
+                // 3. Set Completion Fields
                 booking.finalAmount = finalAmount || booking.price;
                 booking.technicianNote = technicianNote;
                 booking.completedAt = Date.now();
 
-                // 3. Handle extra reason if finalAmount > price
-                if (booking.finalAmount > booking.price) {
-                    if (!extraReason) {
-                        return next(new AppError('Reason for extra charges is required', 400));
-                    }
+                if (Number(booking.finalAmount) > Number(booking.price)) {
+                    if (!extraReason) return next(new AppError('Reason for extra charges is required', 400));
                     booking.extraReason = extraReason;
                 }
 
-                // 4. Handle Part Images if uploaded
                 if (req.files && req.files.length > 0) {
-                    booking.partImages = req.files.map(file =>
-                        file.path.replace(/\\/g, '/').replace('public/', '')
-                    );
+                    booking.partImages = req.files.map(file => file.path);
                 }
+                booking.securityPin = undefined;
             }
 
             await notificationService.send({
                 recipient: booking.customer,
                 type: `BOOKING_${status}`,
                 title: `Booking Update: ${status.replace('_', ' ')}`,
-                message: `Status update for ${booking.service?.title || 'Unknown Service'}: ${status}`,
+                message: `Status update for ${booking.category?.name || 'Unknown Category'}: ${status}`,
                 data: { bookingId: booking._id }
             });
+
+            // CRITICAL FIX: Explicitly update the status on the booking object
+            booking.status = status;
         }
         else {
             return next(new AppError('Invalid status provided', 400));
         }
 
-        booking.status = status;
-        await booking.save();
+        // --- ATOMIC UPDATE (Bypasses Validation for legacy data) ---
+        const updatePayload = {
+            status: booking.status,
+            technician: booking.technician,
+            securityPin: booking.securityPin,
+            finalAmount: booking.finalAmount,
+            technicianNote: booking.technicianNote,
+            completedAt: booking.completedAt,
+            extraReason: booking.extraReason,
+            partImages: booking.partImages
+        };
+
+        const updatedBooking = await Booking.findByIdAndUpdate(
+            req.params.bookingId,
+            { $set: updatePayload },
+            { new: true, runValidators: false }
+        ).populate('category customer technician review');
+
+        console.log(`[DEBUG] Status Update Success: ${updatedBooking._id} (${status})`);
 
         res.status(200).json({
             status: 'success',
             data: {
-                booking
+                booking: updatedBooking
             }
         });
 

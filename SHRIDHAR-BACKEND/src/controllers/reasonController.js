@@ -30,3 +30,19 @@ exports.createReason = async (req, res, next) => {
         next(error);
     }
 };
+
+exports.deleteReason = async (req, res, next) => {
+    try {
+        const reason = await Reason.findByIdAndDelete(req.params.id);
+        if (!reason) {
+            return next(new AppError('No reason found with that ID', 404));
+        }
+
+        res.status(204).json({
+            status: 'success',
+            data: null
+        });
+    } catch (error) {
+        next(error);
+    }
+};
