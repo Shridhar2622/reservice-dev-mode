@@ -145,12 +145,30 @@ const AdminTechnicians = () => {
                             </div>
                         </div>
                         <div className="p-8 bg-slate-50/50 dark:bg-slate-800/50 flex gap-4">
+                            <div className="col-span-2 space-y-4">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Set Initial Password</p>
+                                    <input
+                                        type="text"
+                                        placeholder="Create a strong password for the technician"
+                                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none font-bold text-slate-900 dark:text-white focus:border-indigo-500 transition-all"
+                                        onChange={(e) => viewingDocsBy.newPassword = e.target.value}
+                                    />
+                                </div>
+                            </div>
                             <button
                                 disabled={actionLoading[viewingDocsBy._id || viewingDocsBy.id]}
                                 onClick={async () => {
                                     const id = viewingDocsBy._id || viewingDocsBy.id;
+                                    const pwd = viewingDocsBy.newPassword;
+
+                                    if (!pwd || pwd.length < 8) {
+                                        alert("Please set a password of at least 8 characters.");
+                                        return;
+                                    }
+
                                     setActionLoading(prev => ({ ...prev, [id]: true }));
-                                    await approveTechnician(id);
+                                    await approveTechnician(id, pwd);
                                     setActionLoading(prev => ({ ...prev, [id]: false }));
                                     setViewingDocsBy(null);
                                 }}

@@ -146,7 +146,7 @@ exports.getAllTechnicians = async (req, res, next) => {
 
 exports.approveTechnician = async (req, res, next) => {
     try {
-        const { categoryIds } = req.body; // Expecting Array of Strings
+        const { categoryIds, newPassword } = req.body; // Expecting Array of Strings AND optional newPassword
         const technician = await TechnicianProfile.findById(req.params.id);
         if (!technician) return next(new AppError('Technician not found', 404));
 
@@ -154,10 +154,14 @@ exports.approveTechnician = async (req, res, next) => {
             return next(new AppError('At least one category (Skill) must be assigned to approve.', 400));
         }
 
-        // Validate Categories exist? (Optional but good)
-        // const Category = require('../models/Category');
-        // const count = await Category.countDocuments({ _id: { $in: categoryIds } });
-        // if (count !== categoryIds.length) ...
+        // Set Password if provided
+        if (newPassword && technician.user) {
+            const user = await User.findById(technician.user);
+            if (user) {
+                user.password = newPassword;
+                await user.save({ validateBeforeSave: false }); // Skip other validations
+            }
+        }
 
         technician.categories = categoryIds;
         technician.documents.verificationStatus = 'VERIFIED';
@@ -169,7 +173,7 @@ exports.approveTechnician = async (req, res, next) => {
             action: 'TECHNICIAN_APPROVE',
             targetType: 'TechnicianProfile',
             targetId: technician._id,
-            details: { previousStatus: 'PENDING', assignedCategories: categoryIds }
+            details: { previousStatus: 'PENDING', assignedCategories: categoryIds, passwordReset: !!newPassword }
         });
 
         res.status(200).json({ status: 'success', data: { technician } });

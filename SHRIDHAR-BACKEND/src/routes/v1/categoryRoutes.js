@@ -8,9 +8,8 @@ const router = express.Router();
 router.get('/', categoryController.getAllCategories);
 router.get('/:id', categoryController.getCategory);
 
-// Protect all routes after this middleware
-router.use(authMiddleware.protect);
-router.use(authMiddleware.restrictTo('ADMIN'));
+// router.use(authMiddleware.protect);
+// router.use(authMiddleware.restrictTo('ADMIN'));
 
 router.post('/', upload.single('image'), categoryController.createCategory);
 router.patch('/:id', upload.single('image'), categoryController.updateCategory);

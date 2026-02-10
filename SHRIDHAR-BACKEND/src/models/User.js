@@ -47,6 +47,10 @@ const userSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    pincode: {
+        type: String,
+        trim: true
+    },
     location: {
         // GeoJSON
         type: {

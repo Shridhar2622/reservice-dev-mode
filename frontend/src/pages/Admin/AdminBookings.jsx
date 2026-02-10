@@ -86,8 +86,10 @@ const AdminBookings = () => {
                                                     className="text-[10px] font-bold p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                                                 >
                                                     <option value="">Assign Expert</option>
-                                                    {technicians.filter(t => t.documents?.verificationStatus === 'VERIFIED').map(t => (
-                                                        <option key={t._id || t.id} value={t._id || t.id}>{t.name || t.user?.name}</option>
+                                                    {technicians.filter(t => t.documents?.verificationStatus === 'VERIFIED' && t.isOnline).map(t => (
+                                                        <option key={t._id || t.id} value={t._id || t.id}>
+                                                            {t.name || t.user?.name} {t.isOnline ? '🟢' : '🔴'}
+                                                        </option>
                                                     ))}
                                                 </select>
                                             )}

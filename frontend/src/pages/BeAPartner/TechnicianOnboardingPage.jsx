@@ -6,14 +6,14 @@ import { MapPin, Upload, Check, Loader } from 'lucide-react';
 import Button from '../../components/common/Button';
 import toast from 'react-hot-toast';
 
-const SKILL_OPTIONS = [
-    "Plumber", "Electrician", "Carpenter", "AC Repair",
-    "Painter", "Cleaner", "Pest Control", "Appliance Repair"
-];
+import { useAdmin } from '../../context/AdminContext'; // Import useAdmin
+
+// Removed hardcoded SKILL_OPTIONS
 
 const TechnicianOnboardingPage = () => {
     const { createProfile } = useTechnician();
-    const { user, isAuthenticated, isLoading: isUserLoading } = useUser(); // Get user state
+    const { user, isAuthenticated, isLoading: isUserLoading } = useUser();
+    const { categories } = useAdmin(); // Get categories as skills
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
 
@@ -194,14 +194,15 @@ const TechnicianOnboardingPage = () => {
 
                     {/* Skills */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">Your Skills</label>
+                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">Your Skills (Select Categories)</label>
                         <div className="flex flex-wrap gap-2">
-                            {SKILL_OPTIONS.map(skill => {
+                            {categories.map(cat => {
+                                const skill = cat.name;
                                 const isSelected = selectedSkills.includes(skill);
                                 return (
                                     <button
                                         type="button"
-                                        key={skill}
+                                        key={cat.id || cat._id}
                                         onClick={() => handleSkillToggle(skill)}
                                         className={`px-4 py-2 rounded-full text-sm font-bold transition-all border ${isSelected
                                             ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-500/30'

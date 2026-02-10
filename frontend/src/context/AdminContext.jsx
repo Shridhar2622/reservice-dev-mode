@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { categories as initialCategories, bookings } from '../data/mockData';
 import client from '../api/client';
+import { toast } from 'react-hot-toast';
 
 const AdminContext = createContext();
 
@@ -274,28 +275,55 @@ export const AdminProvider = ({ children }) => {
 
     const addCategory = async (categoryData) => {
         try {
-            const res = await client.post('/categories', {
-                ...categoryData,
-                // Ensure ID/Slug is generated if not handled by backend (Backend handles slug/id)
-            });
+            const formData = new FormData();
+            formData.append('name', categoryData.name);
+            formData.append('description', categoryData.description || '');
+            // Append other fields if they exist in categoryData
+            if (categoryData.icon) formData.append('icon', categoryData.icon);
+            if (categoryData.color) formData.append('color', categoryData.color);
+
+            if (categoryData.image instanceof File) {
+                formData.append('image', categoryData.image);
+            }
+
+            const res = await client.post('/categories', formData);
             if (res.data.status === 'success') {
                 setCategories(prev => [...prev, res.data.data.category]);
+                toast.success("Category added successfully");
             }
         } catch (err) {
             console.error("Failed to add category", err);
+            toast.error(err.response?.data?.message || "Failed to add category");
         }
     };
 
     const updateCategory = async (id, categoryData) => {
         try {
-            const res = await client.patch(`/categories/${id}`, categoryData);
+            let dataToSend = categoryData;
+
+            // Check if we need FormData (if image is being updated)
+            if (categoryData instanceof FormData) {
+                dataToSend = categoryData;
+            } else if (categoryData.image instanceof File) {
+                const formData = new FormData();
+                formData.append('name', categoryData.name);
+                formData.append('description', categoryData.description || '');
+                if (categoryData.icon) formData.append('icon', categoryData.icon);
+                if (categoryData.color) formData.append('color', categoryData.color);
+                formData.append('image', categoryData.image);
+                dataToSend = formData;
+            }
+
+            const res = await client.patch(`/categories/${id}`, dataToSend);
             if (res.data.status === 'success') {
                 setCategories(prev => prev.map(cat =>
                     cat._id === id || cat.id === id ? { ...cat, ...res.data.data.category } : cat
                 ));
+                toast.success("Category updated successfully");
             }
         } catch (err) {
             console.error("Failed to update category", err);
+            toast.error(err.response?.data?.message || "Failed to update category");
         }
     };
 

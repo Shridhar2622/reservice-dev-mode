@@ -2,12 +2,13 @@ import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { gsap } from 'gsap';
 import { useGSAP } from '@gsap/react';
-import { Clock, CheckCircle, User, Calendar, ChevronRight, Search, History, XCircle, TrendingUp, ShieldQuestion, Phone, Mail, Sparkles } from 'lucide-react';
+import { Clock, CheckCircle, User, Calendar, ChevronRight, Search, History, XCircle, TrendingUp, ShieldQuestion, Phone, Mail, Sparkles, Star } from 'lucide-react';
 import Button from '../../components/common/Button';
 import { useBookings } from '../../context/BookingContext';
 import { useUser } from '../../context/UserContext';
 import { useNavigate } from 'react-router-dom';
 import MobileBookingsPage from './MobileBookingsPage';
+import ReviewModal from '../../components/bookings/ReviewModal';
 
 const StatusBadge = ({ status }) => {
     const styles = {
@@ -34,7 +35,7 @@ const StatusBadge = ({ status }) => {
     );
 };
 
-const BookingCard = ({ booking }) => {
+const BookingCard = ({ booking, onRateClick }) => {
     return (
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-100 dark:border-slate-800 hover:shadow-md transition-all group">
             <div className="flex flex-col sm:flex-row gap-5">
@@ -88,6 +89,28 @@ const BookingCard = ({ booking }) => {
                                 <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                                 <span className="text-xs font-bold text-blue-700 dark:text-blue-300">Happy Pin:</span>
                                 <span className="text-sm font-black text-blue-800 dark:text-blue-100 tracking-wider">{booking.securityPin}</span>
+                            </div>
+                        )}
+
+                        {/* Rating Display or Rate Button */}
+                        {booking.status === 'Completed' && (
+                            <div className="mt-3">
+                                {booking.review ? (
+                                    <div className="flex items-center gap-2 text-amber-500">
+                                        <div className="flex">
+                                            {[...Array(5)].map((_, i) => (
+                                                <svg key={i} className={`w-4 h-4 ${i < booking.rating ? 'fill-current' : 'text-slate-200 dark:text-slate-700'}`} viewBox="0 0 20 20">
+                                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                                </svg>
+                                            ))}
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Rated</span>
+                                    </div>
+                                ) : (
+                                    <Button size="sm" onClick={() => onRateClick && onRateClick(booking)} className="bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20">
+                                        <Star className="w-4 h-4 mr-1 fill-white" /> Rate Service
+                                    </Button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -152,10 +175,14 @@ const SupportWidget = () => (
 
 const BookingsPage = () => {
     const [activeTab, setActiveTab] = useState('Pending'); // Pending, Assigned, Completed, History
-    const { bookings } = useBookings();
+    const { bookings, refreshBookings } = useBookings(); // Assuming refreshBookings exists in context, else we might need to manually trigger reload
     const { user, isAuthenticated, isLoading } = useUser();
     const navigate = useNavigate();
     const containerRef = useRef(null);
+
+    // Review Modal State
+    const [reviewModalOpen, setReviewModalOpen] = useState(false);
+    const [selectedBooking, setSelectedBooking] = useState(null);
 
     React.useEffect(() => {
         if (!isLoading && !isAuthenticated) {
@@ -249,7 +276,14 @@ const BookingsPage = () => {
                             <div className="space-y-4">
                                 {filteredBookings.length > 0 ? (
                                     filteredBookings.map(booking => (
-                                        <BookingCard key={booking.id} booking={booking} />
+                                        <BookingCard
+                                            key={booking.id}
+                                            booking={booking}
+                                            onRateClick={(b) => {
+                                                setSelectedBooking(b);
+                                                setReviewModalOpen(true);
+                                            }}
+                                        />
                                     ))
                                 ) : (
                                     <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
@@ -271,6 +305,19 @@ const BookingsPage = () => {
                     </div>
                 </div>
             </div>
+
+            {reviewModalOpen && selectedBooking && (
+                <ReviewModal
+                    booking={selectedBooking}
+                    onClose={() => {
+                        setReviewModalOpen(false);
+                        setSelectedBooking(null);
+                    }}
+                    onReviewSubmitted={(review) => {
+                        if (refreshBookings) refreshBookings();
+                    }}
+                />
+            )}
         </>
     );
 };

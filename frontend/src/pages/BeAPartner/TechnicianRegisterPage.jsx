@@ -16,7 +16,7 @@ const TechnicianRegisterPage = () => {
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
-    const [password, setPassword] = useState('');
+
     const [isLoading, setIsLoading] = useState(false);
 
     // Captcha
@@ -38,8 +38,8 @@ const TechnicianRegisterPage = () => {
         const tokenToSend = isCaptchaEnabled ? recaptchaToken : 'bypass-token';
         const name = `${firstName} ${lastName}`.trim();
 
-        // Register with role 'TECHNICIAN'
-        const result = await register(name, email, password, password, phone, 'TECHNICIAN', tokenToSend);
+        // Register with role 'TECHNICIAN' - Password is auto-generated in backend
+        const result = await register(name, email, '', '', phone, 'TECHNICIAN', tokenToSend);
 
         if (result.success) {
             toast.success("Account created! Let's set up your profile.");
@@ -143,15 +143,7 @@ const TechnicianRegisterPage = () => {
                             required
                         />
 
-                        <Input
-                            id="password"
-                            label="Create Password"
-                            type="password"
-                            placeholder="At least 8 characters"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                        />
+
 
                         <div className="pt-2">
                             {/* Captcha */}

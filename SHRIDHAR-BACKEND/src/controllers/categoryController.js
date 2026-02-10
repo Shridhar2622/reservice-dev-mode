@@ -1,6 +1,15 @@
 const Category = require('../models/Category');
 const Service = require('../models/Service');
 const AppError = require('../utils/AppError');
+const fs = require('fs');
+const path = require('path');
+
+const logPath = path.join(__dirname, '../../debug_category.log');
+const log = (msg, data = '') => {
+    const timestamp = new Date().toISOString();
+    const message = `${timestamp} - ${msg} ${typeof data === 'object' ? JSON.stringify(data) : data}\n`;
+    fs.appendFileSync(logPath, message);
+};
 
 exports.getAllCategories = async (req, res, next) => {
     try {
@@ -37,8 +46,8 @@ exports.getAllCategories = async (req, res, next) => {
 
 exports.createCategory = async (req, res, next) => {
     try {
-        console.log('[DEBUG] createCategory Request Body:', req.body);
-        console.log('[DEBUG] createCategory Request File:', req.file);
+        log('createCategory Request Body:', req.body);
+        log('createCategory Request File:', req.file);
 
         if (req.file) {
             req.body.image = req.file.path;
@@ -46,12 +55,12 @@ exports.createCategory = async (req, res, next) => {
             delete req.body.image; // Allow default if empty
         }
 
-        console.log('[DEBUG] Creating Category with data:', req.body);
+        log('Creating Category with data:', req.body);
         const newCategory = await Category.create(req.body);
-        console.log('[DEBUG] Category Created:', newCategory);
+        log('Category Created:', newCategory);
 
         // Auto-create a corresponding service for this category
-        console.log('[DEBUG] Creating associated Service...');
+        log('Creating associated Service...');
         const newService = await Service.create({
             title: newCategory.name,
             description: newCategory.description || `Professional ${newCategory.name} service`,
@@ -63,7 +72,7 @@ exports.createCategory = async (req, res, next) => {
             rating: newCategory.rating || 0
             // technician: null // Global service
         });
-        console.log('[DEBUG] Service Created:', newService);
+        log('Service Created:', newService);
 
         res.status(201).json({
             status: 'success',
@@ -73,7 +82,8 @@ exports.createCategory = async (req, res, next) => {
             }
         });
     } catch (err) {
-        console.error('[DEBUG] createCategory Error:', err);
+        log('createCategory Error:', err.message);
+        log('Full Error Stack:', err.stack);
         next(err);
     }
 };
